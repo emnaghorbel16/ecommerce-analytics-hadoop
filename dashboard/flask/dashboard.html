@@ -1,0 +1,339 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>E-Commerce Cosmetics · Big Data Dashboard</title>
+  <link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;700;800&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet"/>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+  <style>
+    :root {
+      --bg:       #0a0a0f;
+      --surface:  #13131a;
+      --border:   #1e1e2e;
+      --accent1:  #c084fc;   /* violet */
+      --accent2:  #34d399;   /* emerald */
+      --accent3:  #fb923c;   /* orange */
+      --accent4:  #38bdf8;   /* sky */
+      --text:     #e2e8f0;
+      --muted:    #64748b;
+      --font:     'Syne', sans-serif;
+      --mono:     'DM Mono', monospace;
+    }
+
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: var(--font);
+      min-height: 100vh;
+      padding: 2rem;
+    }
+
+    /* ── noise overlay ── */
+    body::before {
+      content: '';
+      position: fixed; inset: 0;
+      background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.04'/%3E%3C/svg%3E");
+      pointer-events: none; z-index: 0;
+    }
+
+    .wrap { position: relative; z-index: 1; max-width: 1200px; margin: 0 auto; }
+
+    /* ── header ── */
+    header {
+      display: flex; align-items: flex-end; justify-content: space-between;
+      margin-bottom: 2.5rem;
+      padding-bottom: 1.5rem;
+      border-bottom: 1px solid var(--border);
+    }
+    .logo { font-size: 1.6rem; font-weight: 800; letter-spacing: -0.03em; }
+    .logo span { color: var(--accent1); }
+    .badge {
+      font-family: var(--mono); font-size: .72rem;
+      background: var(--surface); border: 1px solid var(--border);
+      padding: .35rem .75rem; border-radius: 999px; color: var(--muted);
+    }
+    .badge b { color: var(--accent2); }
+
+    /* ── KPI strip ── */
+    .kpis {
+      display: grid; grid-template-columns: repeat(3, 1fr);
+      gap: 1rem; margin-bottom: 2rem;
+    }
+    .kpi {
+      background: var(--surface); border: 1px solid var(--border);
+      border-radius: 12px; padding: 1.25rem 1.5rem;
+      display: flex; flex-direction: column; gap: .3rem;
+      transition: border-color .2s;
+    }
+    .kpi:hover { border-color: var(--accent1); }
+    .kpi-label { font-family: var(--mono); font-size: .7rem; color: var(--muted); text-transform: uppercase; letter-spacing: .08em; }
+    .kpi-value { font-size: 1.9rem; font-weight: 800; letter-spacing: -.03em; }
+    .kpi-value.v1 { color: var(--accent1); }
+    .kpi-value.v2 { color: var(--accent2); }
+    .kpi-value.v3 { color: var(--accent3); }
+
+    /* ── grid ── */
+    .grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      grid-template-rows: auto auto;
+      gap: 1.25rem;
+    }
+    .card {
+      background: var(--surface); border: 1px solid var(--border);
+      border-radius: 16px; padding: 1.5rem;
+      transition: border-color .2s;
+    }
+    .card:hover { border-color: var(--border); }
+    .card.wide { grid-column: 1 / -1; }
+
+    .card-header {
+      display: flex; align-items: center; gap: .6rem;
+      margin-bottom: 1.25rem;
+    }
+    .dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+    .card-title { font-size: .85rem; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; }
+    canvas { width: 100% !important; }
+
+    /* ── table ── */
+    table { width: 100%; border-collapse: collapse; font-family: var(--mono); font-size: .8rem; }
+    th { color: var(--muted); font-weight: 500; text-align: left; padding: .5rem .75rem; border-bottom: 1px solid var(--border); }
+    td { padding: .55rem .75rem; border-bottom: 1px solid var(--border); color: var(--text); }
+    tr:last-child td { border-bottom: none; }
+    tr:hover td { background: rgba(255,255,255,.03); }
+    .rank { color: var(--muted); }
+    .bar-cell { display: flex; align-items: center; gap: .6rem; }
+    .mini-bar { height: 4px; border-radius: 2px; background: var(--accent3); min-width: 4px; }
+
+    /* ── loading ── */
+    .loader {
+      height: 220px; display: flex; align-items: center; justify-content: center;
+      color: var(--muted); font-family: var(--mono); font-size: .8rem;
+      flex-direction: column; gap: .5rem;
+    }
+    .spinner {
+      width: 24px; height: 24px;
+      border: 2px solid var(--border);
+      border-top-color: var(--accent1);
+      border-radius: 50%;
+      animation: spin .7s linear infinite;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    .error-msg { color: #f87171; font-family: var(--mono); font-size: .78rem; padding: 1rem; }
+
+    /* ── responsive ── */
+    @media (max-width: 700px) {
+      .grid { grid-template-columns: 1fr; }
+      .card.wide { grid-column: 1; }
+      .kpis { grid-template-columns: 1fr; }
+    }
+  </style>
+</head>
+<body>
+<div class="wrap">
+
+  <header>
+    <div class="logo">Cosmetics <span>Analytics</span></div>
+    <div class="badge">Hadoop · MapReduce · <b>Live</b></div>
+  </header>
+
+  <!-- KPIs -->
+  <div class="kpis">
+    <div class="kpi">
+      <span class="kpi-label">CA Total</span>
+      <span class="kpi-value v1" id="kpi-ca">—</span>
+    </div>
+    <div class="kpi">
+      <span class="kpi-label">Commandes Total</span>
+      <span class="kpi-value v2" id="kpi-orders">—</span>
+    </div>
+    <div class="kpi">
+      <span class="kpi-label">Catégories</span>
+      <span class="kpi-value v3" id="kpi-cats">—</span>
+    </div>
+  </div>
+
+  <!-- Charts grid -->
+  <div class="grid">
+
+    <!-- CA par catégorie -->
+    <div class="card">
+      <div class="card-header">
+        <div class="dot" style="background:var(--accent1)"></div>
+        <span class="card-title">CA par Catégorie</span>
+      </div>
+      <div id="ca-wrap"><div class="loader"><div class="spinner"></div>Chargement HDFS…</div></div>
+    </div>
+
+    <!-- Commandes par mois -->
+    <div class="card">
+      <div class="card-header">
+        <div class="dot" style="background:var(--accent2)"></div>
+        <span class="card-title">Commandes par Mois</span>
+      </div>
+      <div id="monthly-wrap"><div class="loader"><div class="spinner"></div>Chargement HDFS…</div></div>
+    </div>
+
+    <!-- Top produits table -->
+    <div class="card wide">
+      <div class="card-header">
+        <div class="dot" style="background:var(--accent3)"></div>
+        <span class="card-title">Top 10 Produits</span>
+      </div>
+      <div id="products-wrap"><div class="loader"><div class="spinner"></div>Chargement HDFS…</div></div>
+    </div>
+
+  </div>
+</div>
+
+<script>
+  const COLORS = {
+    accent1: '#c084fc',
+    accent2: '#34d399',
+    accent3: '#fb923c',
+    accent4: '#38bdf8',
+    muted:   '#64748b',
+    border:  '#1e1e2e',
+    surface: '#13131a',
+  };
+
+  const CHART_DEFAULTS = {
+    responsive: true,
+    maintainAspectRatio: false,
+    plugins: {
+      legend: { display: false },
+      tooltip: {
+        backgroundColor: COLORS.surface,
+        borderColor: COLORS.border,
+        borderWidth: 1,
+        titleColor: '#e2e8f0',
+        bodyColor: '#94a3b8',
+        padding: 10,
+      }
+    },
+    scales: {
+      x: {
+        ticks: { color: COLORS.muted, font: { family: "'DM Mono'" } },
+        grid: { color: COLORS.border }
+      },
+      y: {
+        ticks: { color: COLORS.muted, font: { family: "'DM Mono'" } },
+        grid: { color: COLORS.border }
+      }
+    }
+  };
+
+  function fmtNum(n) {
+    if (n >= 1e6) return (n/1e6).toFixed(1) + 'M';
+    if (n >= 1e3) return (n/1e3).toFixed(1) + 'k';
+    return n.toFixed(0);
+  }
+
+  function showError(wrap, msg) {
+    wrap.innerHTML = `<div class="error-msg">⚠ ${msg}</div>`;
+  }
+
+  // ── CA par catégorie ─────────────────────────────
+  async function loadCA() {
+    const wrap = document.getElementById('ca-wrap');
+    try {
+      const res = await fetch('/api/ca');
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const data = await res.json();
+      if (data.error) throw new Error(data.error);
+
+      const total = data.reduce((s, d) => s + d.value, 0);
+      document.getElementById('kpi-ca').textContent = fmtNum(total) + ' €';
+      document.getElementById('kpi-cats').textContent = data.length;
+
+      wrap.innerHTML = '<canvas id="ca-chart" height="220"></canvas>';
+      new Chart(document.getElementById('ca-chart'), {
+        type: 'bar',
+        data: {
+          labels: data.map(d => d.label),
+          datasets: [{
+            data: data.map(d => d.value),
+            backgroundColor: data.map((_, i) =>
+              `hsl(${270 + i * 22}, 70%, ${55 + i * 3}%)`),
+            borderRadius: 6,
+            borderSkipped: false,
+          }]
+        },
+        options: { ...CHART_DEFAULTS, plugins: { ...CHART_DEFAULTS.plugins } }
+      });
+    } catch (e) { showError(wrap, e.message); }
+  }
+
+  // ── Commandes par mois ───────────────────────────
+  async function loadMonthly() {
+    const wrap = document.getElementById('monthly-wrap');
+    try {
+      const res = await fetch('/api/monthly');
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const data = await res.json();
+      if (data.error) throw new Error(data.error);
+
+      const total = data.reduce((s, d) => s + d.value, 0);
+      document.getElementById('kpi-orders').textContent = fmtNum(total);
+
+      wrap.innerHTML = '<canvas id="monthly-chart" height="220"></canvas>';
+      new Chart(document.getElementById('monthly-chart'), {
+        type: 'line',
+        data: {
+          labels: data.map(d => d.label),
+          datasets: [{
+            data: data.map(d => d.value),
+            borderColor: COLORS.accent2,
+            backgroundColor: 'rgba(52,211,153,.08)',
+            pointBackgroundColor: COLORS.accent2,
+            pointRadius: 4,
+            tension: 0.4,
+            fill: true,
+          }]
+        },
+        options: { ...CHART_DEFAULTS }
+      });
+    } catch (e) { showError(wrap, e.message); }
+  }
+
+  // ── Top produits ─────────────────────────────────
+  async function loadProducts() {
+    const wrap = document.getElementById('products-wrap');
+    try {
+      const res = await fetch('/api/products');
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const data = await res.json();
+      if (data.error) throw new Error(data.error);
+
+      const max = data[0]?.value || 1;
+      const rows = data.map((d, i) => `
+        <tr>
+          <td class="rank">#${i+1}</td>
+          <td>${d.label}</td>
+          <td>
+            <div class="bar-cell">
+              <div class="mini-bar" style="width:${Math.round((d.value/max)*180)}px"></div>
+              <span>${fmtNum(d.value)}</span>
+            </div>
+          </td>
+        </tr>`).join('');
+
+      wrap.innerHTML = `
+        <table>
+          <thead><tr><th>#</th><th>Produit</th><th>Commandes</th></tr></thead>
+          <tbody>${rows}</tbody>
+        </table>`;
+    } catch (e) { showError(wrap, e.message); }
+  }
+
+  // ── Init ─────────────────────────────────────────
+  loadCA();
+  loadMonthly();
+  loadProducts();
+</script>
+</body>
+</html>
